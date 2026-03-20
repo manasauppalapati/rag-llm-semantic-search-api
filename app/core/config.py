@@ -1,20 +1,40 @@
 """
-Application configuration for the RAG semantic search API lives in this module.
-It centralizes every environment-dependent value the service needs before any
-other component starts doing work.
-Application code must load settings through get_settings() so all consumers see
-the same validated, cached configuration object.
-Required environment variables such as OPENAI_API_KEY and ADMIN_SECRET have no
-defaults, so missing values raise a ValidationError during startup.
-That fail-fast behavior prevents silent misconfiguration from reaching
-production and surfacing as a harder-to-debug incident later.
+Application configuration for the RAG LLM Semantic Search API.
+
+All environment-driven settings are defined here as a single Pydantic
+BaseSettings model. This is the ONLY place configuration lives.
+No other module may call os.environ.get() or hardcode any value
+that could differ between environments.
+
+Usage:
+    from app.core.config import get_settings
+    settings = get_settings()
+
+Required environment variables (no defaults — missing raises ValidationError
+and the process refuses to start):
+    OPENAI_API_KEY  — OpenAI API key for embeddings and completions.
+                      Used by: services/embeddings.py, rag_pipeline.py,
+                      query_rewriter.py
+    ADMIN_SECRET    — Secret for authenticating /admin/keys endpoints.
+                      Used by: middleware/auth.py
+                      Must always be compared with hmac.compare_digest,
+                      never with ==.
+
+Fail-fast behaviour is intentional. Silent misconfiguration in production
+is a P0 incident. The process must refuse to start rather than limp along
+with a None where a secret should be.
+
+Testing:
+    Patch env vars before calling get_settings().
+    Always call get_settings.cache_clear() between test cases that
+    modify environment state, or the cached instance will bleed through.
 """
 
 from functools import lru_cache
 from typing import Self
 
-from pydantic import ConfigDict, field_validator, model_validator
-from pydantic_settings import BaseSettings
+from pydantic import field_validator, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 ALLOWED_LOG_LEVELS: tuple[str, ...] = (
@@ -36,7 +56,7 @@ __all__ = ("get_settings",)
 
 
 class Settings(BaseSettings):
-    model_config = ConfigDict(
+    model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
